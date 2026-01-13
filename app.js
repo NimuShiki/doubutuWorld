@@ -1,51 +1,59 @@
+// ひらがな（U+3041..U+3096）
 const HIRAGANA_RE = /^[\u3041-\u3096]$/;
 
 function isWhitespace(ch) {
   return ch === '\n' || ch === '\r' || ch === '\t' || ch === ' ';
 }
 
+function escapeHtml(s) {
+  return s
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+// TSV: key \t value
+// key は 1文字 or 2文字（ひらがなのみ）
 function parseDictTsv(text) {
   const map1 = new Map(); // 1文字キー
   const map2 = new Map(); // 2文字キー
 
   const lines = text.split(/\r?\n/);
-  for (let i = 0; i < lines.length; i++) {
-    const raw = lines[i];
+  for (const raw of lines) {
     const line = raw.trimEnd();
-
     if (!line || line.startsWith('#')) continue;
 
     const tab = line.indexOf('\t');
     if (tab < 0) continue;
 
     const keyRaw = line.slice(0, tab).trim();
-    const value = line.slice(tab + 1); // 値側は空白含んでもOK
+    const value = line.slice(tab + 1);
 
     const key = keyRaw.normalize('NFC');
-    const keyChars = Array.from(key); // コードポイント単位（日本語はこれでOK）
+    const chars = Array.from(key);
 
-    if (keyChars.length === 1) {
-      const k = keyChars[0];
+    if (chars.length === 1) {
+      const k = chars[0];
       if (HIRAGANA_RE.test(k)) map1.set(k, value);
-    } else if (keyChars.length === 2) {
-      const k0 = keyChars[0], k1 = keyChars[1];
+    } else if (chars.length === 2) {
+      const k0 = chars[0], k1 = chars[1];
       if (HIRAGANA_RE.test(k0) && HIRAGANA_RE.test(k1)) map2.set(k0 + k1, value);
-    } else {
-      // 3文字以上は仕様外 → 無視
-      continue;
     }
   }
 
   return { map1, map2 };
 }
 
-async function loadDict() {
+async function loadDictText() {
   const res = await fetch('./dict.tsv', { cache: 'no-store' });
   if (!res.ok) throw new Error(`dict.tsv load failed: ${res.status}`);
-  const text = await res.text();
-  return parseDictTsv(text);
+  return await res.text();
 }
 
+// 変換（2文字最長一致）
+// 未登録ひらがな・ひらがな以外は無視。空白/改行は保持。
 function convert(src, dict) {
   const s = src.normalize('NFC');
   const chars = Array.from(s);
@@ -56,79 +64,134 @@ function convert(src, dict) {
   for (let i = 0; i < chars.length; ) {
     const ch = chars[i];
 
-    if (isWhitespace(ch)) {
-      out += ch;
-      i++;
-      continue;
-    }
+    if (isWhitespace(ch)) { out += ch; i++; continue; }
 
-    // ひらがな以外は無視（要件通り）
     if (!HIRAGANA_RE.test(ch)) {
+      skipped.add(ch);
       i++;
       continue;
     }
 
-    // 2文字最長一致（優先）
+    // 2文字優先
     if (i + 1 < chars.length && HIRAGANA_RE.test(chars[i + 1])) {
       const k2 = ch + chars[i + 1];
       const v2 = dict.map2.get(k2);
-      if (v2 !== undefined) {
-        out += v2;
-        i += 2;
-        continue;
-      }
+      if (v2 !== undefined) { out += v2; i += 2; continue; }
     }
 
     // 1文字
     const v1 = dict.map1.get(ch);
     if (v1 !== undefined) out += v1;
-    else skipped.add(ch); // 未登録ひらがな（辞書追加のヒント）
+    else skipped.add(ch);
+
     i++;
   }
 
   return { out, skipped };
 }
 
+// 入力ハイライトHTML生成（変換と同じ最長一致で「辞書無し」を赤）
+function buildHighlightHtml(src, dict) {
+  const s = src.normalize('NFC');
+  const chars = Array.from(s);
+  const mark = new Array(chars.length).fill('good');
+
+  for (let i = 0; i < chars.length; ) {
+    const ch = chars[i];
+
+    if (isWhitespace(ch)) { mark[i] = 'space'; i++; continue; }
+
+    if (!HIRAGANA_RE.test(ch)) { mark[i] = 'bad'; i++; continue; }
+
+    // 2文字一致なら両方good
+    if (i + 1 < chars.length && HIRAGANA_RE.test(chars[i + 1])) {
+      const k2 = ch + chars[i + 1];
+      if (dict.map2.has(k2)) {
+        mark[i] = 'good';
+        mark[i + 1] = 'good';
+        i += 2;
+        continue;
+      }
+    }
+
+    // 1文字一致
+    mark[i] = dict.map1.has(ch) ? 'good' : 'bad';
+    i++;
+  }
+
+  let html = '';
+  for (let i = 0; i < chars.length; i++) {
+    const ch = chars[i];
+    const esc = escapeHtml(ch === '\t' ? '    ' : ch);
+    html += (mark[i] === 'bad') ? `<span class="bad">${esc}</span>` : esc;
+  }
+  return html;
+}
+
+function setStatus(el, dict, skippedSet) {
+  const base = `辞書：1文字${dict.map1.size}件 / 2文字${dict.map2.size}件`;
+  if (skippedSet && skippedSet.size > 0) {
+    const skipped = [...skippedSet].filter(ch => HIRAGANA_RE.test(ch)).join('');
+    el.textContent = skipped ? `${base} / 未登録：${skipped}` : base;
+  } else {
+    el.textContent = base;
+  }
+}
+
 (async function main() {
   const status = document.getElementById('status');
   const src = document.getElementById('src');
+  const hl  = document.getElementById('srcHighlight');
   const dst = document.getElementById('dst');
-  const copy = document.getElementById('copy');
 
-  let dict;
+  const copyOut = document.getElementById('copyOut');
+
+  const dictView = document.getElementById('dictView');
+  const copyDict = document.getElementById('copyDict');
+
+  let dictText = '';
+  let dict = { map1: new Map(), map2: new Map() };
+
   try {
-    dict = await loadDict();
+    dictText = await loadDictText();
+    dict = parseDictTsv(dictText);
+    dictView.value = dictText;
     status.textContent = `辞書ロード完了：1文字${dict.map1.size}件 / 2文字${dict.map2.size}件`;
   } catch (e) {
     status.textContent = `辞書ロード失敗：${e.message}`;
-    dict = { map1: new Map(), map2: new Map() };
+    dictView.value = '';
   }
 
   function refresh() {
     const { out, skipped } = convert(src.value, dict);
     dst.value = out;
 
-    const base = `辞書：1文字${dict.map1.size}件 / 2文字${dict.map2.size}件`;
-    if (skipped.size > 0) {
-      status.textContent = `${base} / 未登録：${[...skipped].join('')}`;
-    } else {
-      status.textContent = base;
-    }
+    hl.innerHTML = buildHighlightHtml(src.value, dict);
+
+    // スクロール同期
+    hl.scrollTop = src.scrollTop;
+    hl.scrollLeft = src.scrollLeft;
+
+    setStatus(status, dict, skipped);
   }
 
   src.addEventListener('input', refresh);
-  refresh();
+  src.addEventListener('scroll', () => {
+    hl.scrollTop = src.scrollTop;
+    hl.scrollLeft = src.scrollLeft;
+  });
 
-  copy.addEventListener('click', async () => {
+  copyOut.addEventListener('click', async () => {
     try {
       await navigator.clipboard.writeText(dst.value);
       status.textContent = `${status.textContent} / コピーした`;
     } catch {
-      // 旧式フォールバック
       dst.focus();
       dst.select();
       document.execCommand('copy');
       status.textContent = `${status.textContent} / コピーした（旧式）`;
     }
   });
+
+  refresh();
 })();
