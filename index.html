@@ -4,14 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>ひらがな辞書変換</title>
-  <style>
-    body { font-family: system-ui, sans-serif; margin: 24px; }
-    textarea { width: 100%; height: 10em; font-size: 16px; }
-    .row { display: flex; gap: 12px; align-items: center; margin: 12px 0; flex-wrap: wrap; }
-    .muted { opacity: .75; font-size: 12px; }
-    button { padding: 8px 12px; cursor: pointer; }
-    code { background: #f4f4f4; padding: 2px 4px; border-radius: 4px; }
-  </style>
+  <link rel="stylesheet" href="./style.css" />
 </head>
 <body>
   <h1>ひらがな辞書変換</h1>
@@ -20,19 +13,33 @@
     <div class="muted" id="status">辞書ロード中…</div>
   </div>
 
-  <h3>入力（ひらがな）</h3>
-  <textarea id="src" placeholder="ひらがなを入力"></textarea>
+  <h3>入力（辞書にない部分は赤）</h3>
+  <div class="input-wrap">
+    <div id="srcHighlight" class="layer"></div>
+    <textarea id="src" class="layer" placeholder="ひらがなを入力"></textarea>
+  </div>
 
   <div class="row">
-    <button id="copy">出力をコピー</button>
-    <span class="muted">未登録文字は無視（ただし改行・空白は保持）</span>
+    <button id="copyOut">出力をコピー（Slack用）</button>
+    <span class="muted">未登録ひらがな・ひらがな以外は無視（改行/空白は保持）</span>
   </div>
 
   <h3>出力</h3>
-  <textarea id="dst" readonly placeholder="ここに出力"></textarea>
+  <textarea id="dst" class="plain" readonly placeholder="ここに出力"></textarea>
 
-  <div class="muted">
-    辞書形式: <code>1行1変換</code> / <code>タブ区切り</code> / <code># コメント</code>
+  <div class="grid2">
+    <div class="panel">
+      <h3>辞書（dict.tsv をそのまま表示）</h3>
+      <textarea id="dictView" class="plain" readonly></textarea>
+    </div>
+
+    <div class="panel">
+      <h3>お知らせ</h3>
+      <div class="notice">
+【2026-01-14】【UpDate】辞書表示欄、お知らせ欄を追加、辞書にない文字を赤表示
+【2026-01-14】初版公開
+      </div>
+    </div>
   </div>
 
   <script src="./app.js"></script>
