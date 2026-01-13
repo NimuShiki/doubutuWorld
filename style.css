@@ -98,6 +98,17 @@ textarea.plain {
   margin-top: 16px;
 }
 
+.notice {
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.5;
+  font-size: 14px;
+  padding: 12px;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  background: #fafafa;
+}
+
 @media (max-width: 900px) {
   .grid2 {
     grid-template-columns: 1fr;
