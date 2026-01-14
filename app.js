@@ -2,7 +2,7 @@
 const HIRAGANA_RE = /^[\u3041-\u3096]$/;
 
 function isWhitespace(ch) {
-  return ch === '\n' || ch === '\r' || ch === '\t' || ch === ' ';
+  return ch === '\n' || ch === '\r' || ch === '\t' || ch === ' ' || ch === '　';
 }
 
 function escapeHtml(s) {
