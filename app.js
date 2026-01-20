@@ -145,7 +145,8 @@ function setStatus(el, dict, skippedSet) {
   const dst = document.getElementById('dst');
 
   const copyOut = document.getElementById('copyOut');
-
+  const copyOutSpace = document.getElementById('copyOutSpace');
+  
   const dictView = document.getElementById('dictView');
   const copyDict = document.getElementById('copyDict');
 
@@ -192,6 +193,21 @@ function setStatus(el, dict, skippedSet) {
       status.textContent = `${status.textContent} / コピーした（旧式）`;
     }
   });
-
+  
+  copyOutSpace.addEventListener('click', async () => {
+    const text = dst.value.replaceAll('::', ' ');
+    try {
+      await navigator.clipboard.writeText(text);
+      status.textContent = `${status.textContent} / コピーした（::→␠）`;
+    } catch {
+      dst.value = text;       // フォールバックのため一時的に入れる
+      dst.focus();
+      dst.select();
+      document.execCommand('copy');
+      // 元に戻す
+      refresh();
+      status.textContent = `${status.textContent} / コピーした（::→␠・旧式）`;
+    }
+});
   refresh();
 })();
